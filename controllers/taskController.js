@@ -1,3 +1,4 @@
+
 const pool = require("../db");
 
 const getTasks = async (req, res) => {
@@ -30,7 +31,7 @@ const getTasks = async (req, res) => {
 const createTask = async (req, res) => {
   try {
 
-    const { title, completed, status, priority } = req.body;
+    const { title, status, priority } = req.body;
 
     const userId = req.user.id;
 
@@ -41,20 +42,15 @@ const createTask = async (req, res) => {
       });
     }
 
-    const taskCompleted = typeof completed === "boolean" ? completed : false;
-    const taskStatus = status || (taskCompleted ? "completed" : "pending");
-    const taskPriority = priority || "medium";
-
     const newTask = await pool.query(
       `INSERT INTO tasks
-      (title, completed, status, priority, user_id, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+      (title, status, priority, user_id)
+      VALUES ($1, $2, $3, $4)
       RETURNING *`,
       [
         title,
-        taskCompleted,
-        taskStatus,
-        taskPriority,
+        status || "pending",
+        priority || "medium",
         userId,
       ]
     );
@@ -76,76 +72,76 @@ const createTask = async (req, res) => {
   }
 };
 
+// =========================
+// UPDATE TASK
+// =========================
+
 const updateTask = async (req, res) => {
   try {
-    const { title, completed, status, priority } = req.body;
-    const userId = req.user.id;
-    const taskId = req.params.id;
 
-    const existingTask = await pool.query(
-      "SELECT * FROM tasks WHERE id = $1 AND user_id = $2",
-      [taskId, userId]
-    );
+    const { id } = req.params;
 
-    if (existingTask.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Task not found",
-      });
-    }
-
-    const currentTask = existingTask.rows[0];
-    const updatedTitle = title || currentTask.title;
-    const updatedCompleted = typeof completed === "boolean" ? completed : currentTask.completed;
-    const updatedStatus = status || (updatedCompleted ? "completed" : currentTask.status || "pending");
-    const updatedPriority = priority || currentTask.priority || "medium";
+    const { title, completed } = req.body;
 
     const updatedTask = await pool.query(
-      `UPDATE tasks SET title = $1, completed = $2, status = $3, priority = $4, updated_at = NOW()
-       WHERE id = $5 AND user_id = $6 RETURNING *`,
-      [updatedTitle, updatedCompleted, updatedStatus, updatedPriority, taskId, userId]
+      `UPDATE tasks
+       SET title = $1,
+       completed = $2,
+       updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+       RETURNING *`,
+      [
+        title,
+        completed || false,
+        id,
+      ]
     );
 
     res.status(200).json({
       success: true,
       task: updatedTask.rows[0],
     });
+
   } catch (error) {
+
     console.log(error);
+
     res.status(500).json({
       success: false,
       message: "Server error",
     });
+
   }
 };
 
+// =========================
+// DELETE TASK
+// =========================
+
 const deleteTask = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const taskId = req.params.id;
 
-    const deleted = await pool.query(
-      "DELETE FROM tasks WHERE id = $1 AND user_id = $2 RETURNING *",
-      [taskId, userId]
+    const { id } = req.params;
+
+    await pool.query(
+      "DELETE FROM tasks WHERE id = $1",
+      [id]
     );
-
-    if (deleted.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Task not found",
-      });
-    }
 
     res.status(200).json({
       success: true,
       message: "Task deleted",
     });
+
   } catch (error) {
+
     console.log(error);
+
     res.status(500).json({
       success: false,
       message: "Server error",
     });
+
   }
 };
 
